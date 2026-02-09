@@ -213,27 +213,45 @@ stages:
               git add CHANGELOG.md
               git commit -m "chore: Release $RELEASE_VERSION" || true
 
-              # Create annotated tag
+              # Ensure unique tag: if a tag exists, bump patch until free
+              ORIG_TAG="$RELEASE_VERSION"
+              # Extract numeric parts
+              MAJOR=$(echo "$ORIG_TAG" | cut -d. -f1 | sed 's/v//')
+              MINOR=$(echo "$ORIG_TAG" | cut -d. -f2)
+              PATCH=$(echo "$ORIG_TAG" | cut -d. -f3)
+              NEW_PATCH=$PATCH
+              NEW_VERSION="v${MAJOR}.${MINOR}.${NEW_PATCH}"
+              while git rev-parse -q --verify "refs/tags/${NEW_VERSION}" >/dev/null 2>&1 || git ls-remote --tags origin "refs/tags/${NEW_VERSION}" | grep -q "refs/tags/${NEW_VERSION}"; do
+                NEW_PATCH=$((NEW_PATCH + 1))
+                NEW_VERSION="v${MAJOR}.${MINOR}.${NEW_PATCH}"
+              done
+              RELEASE_VERSION="$NEW_VERSION"
+              echo "Using release version: $RELEASE_VERSION"
+
+              # Create annotated tag (after ensuring uniqueness)
               git tag "$RELEASE_VERSION" -m "Release $RELEASE_VERSION"
 
-              # Use System.AccessToken to set remote URL for pushing the tag
+              # Use System.AccessToken to push the tag via an authenticated URL
               if [ -z "$SYSTEM_ACCESSTOKEN" ]; then
                 echo "SYSTEM_ACCESSTOKEN is not set; ensure 'Allow scripts to access the OAuth token' is enabled"
                 exit 1
               fi
 
-              # Replace origin URL to use token for authentication
               ORIGIN_URL=$(git remote get-url origin)
               echo "Original origin: $ORIGIN_URL"
-              # Construct authenticated URL (supports https remotes)
-              AUTH_URL="$(echo $ORIGIN_URL | sed -E 's#https://##')"
-              git remote set-url origin "https://$SYSTEM_ACCESSTOKEN@$AUTH_URL"
 
-              # Push tag using authenticated remote
-              if git push origin "$RELEASE_VERSION" --force; then
+              # Strip any user portion from the origin URL (e.g. user@host)
+              # and ensure we have an https URL to embed the token into.
+              CLEAN_URL=$(echo "$ORIGIN_URL" | sed -E 's#https://[^@]*@#https://#')
+
+              # Build authenticated push URL inserting the token after protocol
+              AUTH_PUSH_URL=$(echo "$CLEAN_URL" | sed -E "s#https://#https://$SYSTEM_ACCESSTOKEN@#")
+
+              echo "Pushing tag to: $CLEAN_URL"
+              if git push "$AUTH_PUSH_URL" "refs/tags/$RELEASE_VERSION":refs/tags/$RELEASE_VERSION --force; then
                 echo "Git tag pushed: $RELEASE_VERSION"
               else
-                echo "Failed to push tag; ensure token has repo permission"
+                echo "Failed to push tag; ensure token has repo permission and URL is valid"
                 exit 1
               fi
             displayName: 'Create git tag for release'
