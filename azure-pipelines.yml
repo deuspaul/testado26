@@ -53,11 +53,11 @@ stages:
             condition: always()
 
           # Publish code coverage with Cobertura
-          - task: PublishCodeCoverageResults@1
+          - task: PublishCodeCoverageResults@2
             inputs:
               codeCoverageTool: 'cobertura'
-              summaryFileLocation: '$(Build.ArtifactStagingDirectory)/../coverage.xml'
-              reportDirectory: '$(Build.ArtifactStagingDirectory)/../htmlcov'
+              summaryFileLocation: '$(Build.SourcesDirectory)/coverage.xml'
+              reportDirectory: '$(Build.SourcesDirectory)/htmlcov'
               failIfCoverageEmpty: false
             displayName: 'Publish code coverage'
             condition: always()
