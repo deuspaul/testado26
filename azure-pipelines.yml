@@ -79,9 +79,14 @@ stages:
 
           # Install Trivy for dependency scanning
           - script: |
-              sudo wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
-              echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
-              sudo apt-get update && sudo apt-get install -y trivy
+              VERSION=$(curl --silent "https://api.github.com/repos/aquasecurity/trivy/releases/latest" | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
+              TRIVY_URL="https://github.com/aquasecurity/trivy/releases/download/v${VERSION}/trivy_${VERSION}_Linux-64bit.tar.gz"
+              mkdir -p /tmp/trivy-download
+              cd /tmp/trivy-download
+              wget -q "${TRIVY_URL}" -O trivy.tar.gz
+              tar -xzf trivy.tar.gz
+              sudo mv trivy /usr/local/bin/
+              trivy --version
             displayName: 'Install Trivy'
             continueOnError: true
 
