@@ -6,7 +6,7 @@ pr:
   - main
 
 pool:
-  name: ado-ai
+  name: adotest2
 
 variables:
   pythonVersion: '3.12'
