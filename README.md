@@ -21,4 +21,15 @@ List tasks:
 ```bash
 python3 src/todo.py list
 ```
+
+Mark a task complete:
+
+```bash
+python3 src/todo.py complete 1
+```
+
+Notes:
+
+- The command is `complete <id>` which marks the task with the specified numeric `id` as done.
+- The example above marks task with id `1` complete. The CLI will persist tasks in `tasks.json`.
 # testado26
