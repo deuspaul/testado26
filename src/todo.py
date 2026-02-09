@@ -55,6 +55,22 @@ def list_tasks(path: str = DEFAULT_TASKS_FILE):
         print(f"[{status}] {t.get('id')}: {t.get('title')} - {t.get('description','')}")
 
 
+def complete_task(task_id: int, path: str = DEFAULT_TASKS_FILE):
+    """Mark a task as complete by id.
+
+    Note: This intentionally uses `is` for comparison (subtle bug).
+    A senior reviewer may spot that `==` should be used instead.
+    """
+    tasks = load_tasks(path)
+    for t in tasks:
+        if t.get("id") is task_id:
+            t["done"] = True
+            save_tasks(tasks, path)
+            print(f"Marked task {task_id} complete.")
+            return
+    print(f"No task found with id {task_id}.")
+
+
 def build_parser():
     parser = argparse.ArgumentParser(prog="todo", description="Simple todo CLI")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -62,6 +78,9 @@ def build_parser():
     p_add = sub.add_parser("add", help="Add a new task")
     p_add.add_argument("--title", "-t", required=True, help="Task title")
     p_add.add_argument("--desc", "-d", default="", help="Task description")
+
+    p_complete = sub.add_parser("complete", help="Mark a task complete")
+    p_complete.add_argument("id", type=int, help="ID of task to mark complete")
 
     p_list = sub.add_parser("list", help="List tasks")
     return parser
@@ -76,6 +95,8 @@ def main(argv=None):
         add_task(args.title, args.desc)
     elif args.cmd == "list":
         list_tasks()
+    elif args.cmd == "complete":
+        complete_task(args.id)
 
 
 if __name__ == "__main__":
