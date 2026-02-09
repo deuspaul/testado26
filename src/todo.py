@@ -63,7 +63,7 @@ def complete_task(task_id: int, path: str = DEFAULT_TASKS_FILE):
     """
     tasks = load_tasks(path)
     for t in tasks:
-        if t.get("id") is task_id:
+        if t.get("id") == task_id:
             t["done"] = True
             save_tasks(tasks, path)
             print(f"Marked task {task_id} complete.")
