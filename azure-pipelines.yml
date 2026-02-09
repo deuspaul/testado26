@@ -151,6 +151,9 @@ stages:
       - job: CreateRelease
         displayName: 'Create Release and Generate Changelog'
         steps:
+          - checkout: self
+            persistCredentials: true
+            displayName: 'Checkout repository (persist credentials)'
           # Determine version and create git tag using semantic versioning
           - script: |
               # Get latest tag
@@ -201,20 +204,28 @@ stages:
           # Create git tag and commit
           - script: |
               RELEASE_VERSION=$(releaseVersion)
-              
-              # Configure git credentials
+
+              # Configure git user for the release commit
               git config user.email "release-bot@azuredevops.local"
               git config user.name "Release Bot"
-              
-              # Add changelog to git
+
+              # Add changelog to git and commit (if any changes)
               git add CHANGELOG.md
               git commit -m "chore: Release $RELEASE_VERSION" || true
-              
-              # Create and push tag
+
+              # Create annotated tag
               git tag "$RELEASE_VERSION" -m "Release $RELEASE_VERSION"
-              git push origin "$RELEASE_VERSION" --force 2>/dev/null || echo "Tag push skipped in non-main scenarios"
-              
-              echo "Git tag created: $RELEASE_VERSION"
+
+              # Push tag using the pipeline's persisted credentials (System.AccessToken)
+              # The checkout step above was invoked with persistCredentials:true, which
+              # configures the git credential helper to use the OAuth token available
+              # to the agent. This avoids interactive prompts and uses the system token.
+              if git push origin "$RELEASE_VERSION" --force; then
+                echo "Git tag pushed: $RELEASE_VERSION"
+              else
+                echo "Failed to push tag; ensure 'Allow scripts to access the OAuth token' is enabled and agent has permissions"
+                exit 1
+              fi
             displayName: 'Create git tag for release'
 
           # Package application into zip
