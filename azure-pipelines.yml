@@ -91,15 +91,6 @@ stages:
             displayName: 'Run Trivy dependency scan'
             continueOnError: true
 
-          # Publish Trivy SARIF report
-          - task: PublishSecurityAnalysisLogs@3
-            inputs:
-              ArtifactName: 'CodeAnalysisLogs'
-              ArtifactType: 'container'
-              PublishProcessedResults: true
-            displayName: 'Publish Trivy SARIF report'
-            condition: always()
-
           # Copy coverage.xml to staging directory
           - script: |
               cp coverage.xml $(Build.ArtifactStagingDirectory)/coverage.xml 2>/dev/null || true
