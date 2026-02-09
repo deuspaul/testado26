@@ -216,17 +216,29 @@ stages:
               # Create annotated tag
               git tag "$RELEASE_VERSION" -m "Release $RELEASE_VERSION"
 
-              # Push tag using the pipeline's persisted credentials (System.AccessToken)
-              # The checkout step above was invoked with persistCredentials:true, which
-              # configures the git credential helper to use the OAuth token available
-              # to the agent. This avoids interactive prompts and uses the system token.
+              # Use System.AccessToken to set remote URL for pushing the tag
+              if [ -z "$SYSTEM_ACCESSTOKEN" ]; then
+                echo "SYSTEM_ACCESSTOKEN is not set; ensure 'Allow scripts to access the OAuth token' is enabled"
+                exit 1
+              fi
+
+              # Replace origin URL to use token for authentication
+              ORIGIN_URL=$(git remote get-url origin)
+              echo "Original origin: $ORIGIN_URL"
+              # Construct authenticated URL (supports https remotes)
+              AUTH_URL="$(echo $ORIGIN_URL | sed -E 's#https://##')"
+              git remote set-url origin "https://$SYSTEM_ACCESSTOKEN@$AUTH_URL"
+
+              # Push tag using authenticated remote
               if git push origin "$RELEASE_VERSION" --force; then
                 echo "Git tag pushed: $RELEASE_VERSION"
               else
-                echo "Failed to push tag; ensure 'Allow scripts to access the OAuth token' is enabled and agent has permissions"
+                echo "Failed to push tag; ensure token has repo permission"
                 exit 1
               fi
             displayName: 'Create git tag for release'
+            env:
+              SYSTEM_ACCESSTOKEN: $(System.AccessToken)
 
           # Package application into zip
           - script: |
