@@ -1,1 +1,5 @@
-# No external dependencies required; uses Python standard library
+# Core dependencies
+# (None for main app; uses Python standard library)
+
+# Testing dependencies
+pytest>=7.0
