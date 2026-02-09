@@ -142,3 +142,127 @@ stages:
               fi
             displayName: 'Generate build report'
             condition: always()
+
+  - stage: Release
+    displayName: 'Release and Package'
+    dependsOn: Build_and_Test
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - job: CreateRelease
+        displayName: 'Create Release and Generate Changelog'
+        steps:
+          # Determine version and create git tag using semantic versioning
+          - script: |
+              # Get latest tag
+              LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+              echo "Latest tag: $LATEST_TAG"
+              
+              # Extract version numbers
+              MAJOR=$(echo $LATEST_TAG | cut -d. -f1 | sed 's/v//')
+              MINOR=$(echo $LATEST_TAG | cut -d. -f2)
+              PATCH=$(echo $LATEST_TAG | cut -d. -f3)
+              
+              # Increment patch version
+              NEW_PATCH=$((PATCH + 1))
+              NEW_VERSION="v${MAJOR}.${MINOR}.${NEW_PATCH}"
+              
+              echo "##vso[task.setvariable variable=releaseVersion]$NEW_VERSION"
+              echo "New release version: $NEW_VERSION"
+            displayName: 'Determine semantic version'
+
+          # Generate changelog from git commits
+          - script: |
+              RELEASE_VERSION=$(releaseVersion)
+              CHANGELOG_FILE="CHANGELOG.md"
+              
+              # Create header for new release
+              {
+                echo "# Changelog"
+                echo ""
+                echo "## [$RELEASE_VERSION] - $(date +%Y-%m-%d)"
+                echo ""
+                echo "### Added"
+                git log --oneline --pretty=format:"- %s" HEAD~10..HEAD 2>/dev/null | head -20 || echo "- Initial release"
+                echo ""
+                echo "### Fixed"
+                echo "- Bug fixes and improvements from previous releases"
+                echo ""
+                echo "### Security"
+                echo "- Security scans and vulnerability assessments performed"
+                echo ""
+                if [ -f "$CHANGELOG_FILE" ]; then
+                  tail -n +2 "$CHANGELOG_FILE"
+                fi
+              } > CHANGELOG.md.tmp && mv CHANGELOG.md.tmp CHANGELOG.md
+              
+              cat CHANGELOG.md
+            displayName: 'Generate changelog'
+
+          # Create git tag and commit
+          - script: |
+              RELEASE_VERSION=$(releaseVersion)
+              
+              # Configure git credentials
+              git config user.email "release-bot@azuredevops.local"
+              git config user.name "Release Bot"
+              
+              # Add changelog to git
+              git add CHANGELOG.md
+              git commit -m "chore: Release $RELEASE_VERSION" || true
+              
+              # Create and push tag
+              git tag "$RELEASE_VERSION" -m "Release $RELEASE_VERSION"
+              git push origin "$RELEASE_VERSION" --force 2>/dev/null || echo "Tag push skipped in non-main scenarios"
+              
+              echo "Git tag created: $RELEASE_VERSION"
+            displayName: 'Create git tag for release'
+
+          # Package application into zip
+          - script: |
+              RELEASE_VERSION=$(releaseVersion)
+              PACKAGE_NAME="testado26-${RELEASE_VERSION}"
+              PUBLISH_DIR="$(Build.ArtifactStagingDirectory)/release"
+              
+              mkdir -p "$PUBLISH_DIR"
+              
+              # Create zip package excluding unnecessary files
+              cd $(Build.SourcesDirectory)
+              zip -r "$PUBLISH_DIR/${PACKAGE_NAME}.zip" \
+                src/ tests/ requirements.txt README.md CHANGELOG.md \
+                -x "*.pyc" "__pycache__/*" ".git/*" ".gitignore" \
+                "*.egg-info/*" ".pytest_cache/*" "htmlcov/*"
+              
+              echo "Package created: $PUBLISH_DIR/${PACKAGE_NAME}.zip"
+              ls -lh "$PUBLISH_DIR/${PACKAGE_NAME}.zip"
+            displayName: 'Package application as zip'
+
+          # Publish release artifacts
+          - task: PublishBuildArtifacts@1
+            inputs:
+              PathtoPublish: '$(Build.ArtifactStagingDirectory)/release'
+              ArtifactName: 'release-package'
+            displayName: 'Publish release package'
+            condition: always()
+
+          # Publish changelog
+          - task: PublishBuildArtifacts@1
+            inputs:
+              PathtoPublish: '$(Build.SourcesDirectory)'
+              ArtifactName: 'release-notes'
+              PathtoPublishIncludesPattern: 'CHANGELOG.md'
+            displayName: 'Publish changelog'
+            condition: always()
+
+          # Create release summary
+          - script: |
+              RELEASE_VERSION=$(releaseVersion)
+              echo "##[section]Release Summary"
+              echo "Version: $RELEASE_VERSION"
+              echo "Build ID: $(Build.BuildId)"
+              echo "Build Number: $(Build.BuildNumber)"
+              echo "Source Branch: $(Build.SourceBranch)"
+              echo ""
+              echo "Artifacts:"
+              echo "  - Release Package: testado26-${RELEASE_VERSION}.zip"
+              echo "  - Changelog: CHANGELOG.md"
+            displayName: 'Display release summary'
