@@ -1,6 +1,7 @@
 trigger:
   - main
   - feature/*
+  - fix/*
 
 pr:
   - main
@@ -33,7 +34,8 @@ stages:
 
           # Run pytest with coverage
           - script: |
-              pytest tests/ \
+              mkdir -p $(Build.ArtifactStagingDirectory)/junit
+              PYTHONPATH=$(Build.SourcesDirectory) pytest tests/ \
                 --junitxml=$(Build.ArtifactStagingDirectory)/junit/test-results.xml \
                 --cov=src --cov-report=xml --cov-report=html --cov-report=term \
                 -v
@@ -77,9 +79,9 @@ stages:
 
           # Install Trivy for dependency scanning
           - script: |
-              wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | apt-key add -
-              echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | tee -a /etc/apt/sources.list.d/trivy.list
-              apt-get update && apt-get install -y trivy
+              sudo wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+              echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
+              sudo apt-get update && sudo apt-get install -y trivy
             displayName: 'Install Trivy'
             continueOnError: true
 
