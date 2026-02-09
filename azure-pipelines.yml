@@ -1,0 +1,146 @@
+trigger:
+  - main
+  - feature/*
+
+pr:
+  - main
+
+pool:
+  name: ado-ai
+
+variables:
+  pythonVersion: '3.12'
+  artifactName: 'test-results'
+
+stages:
+  - stage: Build_and_Test
+    displayName: 'Build and Test'
+    jobs:
+      - job: BuildAndTest
+        displayName: 'Build, Test, and Security Scan'
+        steps:
+          # Setup Python
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '$(pythonVersion)'
+            displayName: 'Use Python $(pythonVersion)'
+
+          # Install dependencies
+          - script: |
+              python -m pip install --upgrade pip
+              pip install -r requirements.txt
+            displayName: 'Install dependencies'
+
+          # Run pytest with coverage
+          - script: |
+              pytest tests/ \
+                --junitxml=$(Build.ArtifactStagingDirectory)/junit/test-results.xml \
+                --cov=src --cov-report=xml --cov-report=html --cov-report=term \
+                -v
+            displayName: 'Run pytest with coverage'
+            continueOnError: true
+
+          # Publish pytest results
+          - task: PublishTestResults@2
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: '$(Build.ArtifactStagingDirectory)/junit/test-results.xml'
+              testRunTitle: 'Python Unit Tests'
+              publishRunAttachments: true
+            displayName: 'Publish test results'
+            condition: always()
+
+          # Publish code coverage with Cobertura
+          - task: PublishCodeCoverageResults@1
+            inputs:
+              codeCoverageTool: 'cobertura'
+              summaryFileLocation: '$(Build.ArtifactStagingDirectory)/../coverage.xml'
+              reportDirectory: '$(Build.ArtifactStagingDirectory)/../htmlcov'
+              failIfCoverageEmpty: false
+            displayName: 'Publish code coverage'
+            condition: always()
+
+          # Run Bandit for security vulnerability scanning
+          - script: |
+              bandit -r src/ -f json -o $(Build.ArtifactStagingDirectory)/bandit-report.json || true
+              bandit -r src/ -f html -o $(Build.ArtifactStagingDirectory)/bandit-report.html || true
+            displayName: 'Run Bandit security scan'
+            continueOnError: true
+
+          # Publish Bandit report as artifact
+          - task: PublishBuildArtifacts@1
+            inputs:
+              PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+              ArtifactName: '$(artifactName)-bandit'
+            displayName: 'Publish Bandit report'
+            condition: always()
+
+          # Install Trivy for dependency scanning
+          - script: |
+              wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | apt-key add -
+              echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | tee -a /etc/apt/sources.list.d/trivy.list
+              apt-get update && apt-get install -y trivy
+            displayName: 'Install Trivy'
+            continueOnError: true
+
+          # Run Trivy for dependency scanning
+          - script: |
+              mkdir -p $(Build.ArtifactStagingDirectory)/trivy
+              trivy fs --format json --output $(Build.ArtifactStagingDirectory)/trivy/scan-report.json . || true
+              trivy fs --format sarif --output $(Build.ArtifactStagingDirectory)/trivy/scan-report.sarif . || true
+            displayName: 'Run Trivy dependency scan'
+            continueOnError: true
+
+          # Publish Trivy SARIF report
+          - task: PublishSecurityAnalysisLogs@3
+            inputs:
+              ArtifactName: 'CodeAnalysisLogs'
+              ArtifactType: 'container'
+              PublishProcessedResults: true
+            displayName: 'Publish Trivy SARIF report'
+            condition: always()
+
+          # Copy coverage.xml to staging directory
+          - script: |
+              cp coverage.xml $(Build.ArtifactStagingDirectory)/coverage.xml 2>/dev/null || true
+            displayName: 'Copy coverage files'
+            condition: always()
+
+          # Publish all artifacts
+          - task: PublishBuildArtifacts@1
+            inputs:
+              PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+              ArtifactName: '$(artifactName)-all'
+            displayName: 'Publish all test and scan artifacts'
+            condition: always()
+
+  - stage: Report
+    displayName: 'Security and Coverage Report'
+    dependsOn: Build_and_Test
+    condition: always()
+    jobs:
+      - job: ReportGeneration
+        displayName: 'Generate Reports'
+        steps:
+          - task: DownloadBuildArtifacts@0
+            inputs:
+              buildType: 'current'
+              downloadType: 'all'
+            displayName: 'Download all artifacts'
+            condition: always()
+
+          - script: |
+              echo "=== Pytest Summary ==="
+              if [ -f "$(Pipeline.Workspace)/**/test-results.xml" ]; then
+                echo "Test report generated successfully"
+              fi
+              echo "=== Bandit Summary ==="
+              if [ -f "$(Pipeline.Workspace)/**/bandit-report.json" ]; then
+                echo "Bandit security scan completed"
+              fi
+              echo "=== Trivy Summary ==="
+              if [ -f "$(Pipeline.Workspace)/**/scan-report.sarif" ]; then
+                echo "Trivy dependency scan completed"
+              fi
+            displayName: 'Generate build report'
+            condition: always()

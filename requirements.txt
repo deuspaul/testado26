@@ -2,4 +2,8 @@
 # (None for main app; uses Python standard library)
 
 # Testing dependencies
-pytest>=7.0
+pytest>=7.0pytest-cov>=4.0
+coverage>=7.0
+
+# Security scanning
+bandit>=1.7.5
