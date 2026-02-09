@@ -1,6 +1,6 @@
 trigger:
   - main
-  - feature/*
+ # - feature/*
 
 pr:
   - main
@@ -20,10 +20,10 @@ stages:
         displayName: 'Build, Test, and Security Scan'
         steps:
           # Setup Python
-          - task: UsePythonVersion@0
-            inputs:
-              versionSpec: '$(pythonVersion)'
-            displayName: 'Use Python $(pythonVersion)'
+          #- task: UsePythonVersion@0
+          #  inputs:
+          #    versionSpec: '$(pythonVersion)'
+          #  displayName: 'Use Python $(pythonVersion)'
 
           # Install dependencies
           - script: |
