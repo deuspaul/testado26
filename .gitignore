@@ -118,3 +118,7 @@ Desktop.ini
 # dotenv
 .env
 .env.*
+
+
+# App specific
+tasks.json
